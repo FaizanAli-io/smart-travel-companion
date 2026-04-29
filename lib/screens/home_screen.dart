@@ -1,213 +1,153 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../providers/app_providers.dart';
-import 'dart:async';
+import 'package:google_fonts/google_fonts.dart';
 
-class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+import '../providers/app_providers.dart';
+import '../theme/app_theme.dart';
+import '../widgets/place_card.dart';
+import '../widgets/state_views.dart';
+
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
 
   @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final places = ref.watch(homePlacesProvider);
+    final favoriteIds = ref.watch(favoritesProvider);
+    final homeFeedMode = ref.watch(homeFeedModeProvider);
+    final offlineMode = ref.watch(offlineModeProvider);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      children: [
+        if (offlineMode) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.wifi_off_rounded, color: AppColors.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Offline mode is active. Cached places are still available.',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+        ],
+        GestureDetector(
+          onTap: () => context.push('/search'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.55)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Search places',
+                    style: GoogleFonts.poppins(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.58),
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.tune_rounded),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _ModeChip(
+                label: 'All',
+                selected: homeFeedMode == HomeFeedMode.all,
+                onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.all,
+              ),
+              const SizedBox(width: 10),
+              _ModeChip(
+                label: 'Favorites',
+                selected: homeFeedMode == HomeFeedMode.favorites,
+                onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.favorites,
+              ),
+              const SizedBox(width: 10),
+              _ModeChip(
+                label: 'Recent',
+                selected: homeFeedMode == HomeFeedMode.recent,
+                onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.recent,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
+        if (places.isEmpty)
+          EmptyStateView(
+            onClearFilters: () {
+              ref.read(searchQueryProvider.notifier).state = '';
+              ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.all;
+            },
+          )
+        else ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                homeFeedMode == HomeFeedMode.recent ? 'Recently viewed' : 'Discover places',
+                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              Text(
+                '${places.length} results',
+                style: GoogleFonts.poppins(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...places.map(
+            (place) => Padding(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: PlaceCard(
+                place: place,
+                isFavorite: favoriteIds.contains(place.id),
+                onTap: () => context.push('/detail/${place.id}'),
+                onFavoriteToggle: () =>
+                    ref.read(favoritesProvider.notifier).toggleFavorite(place.id),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final TextEditingController _searchController = TextEditingController();
-  Timer? _debounce;
-  bool _isFavoriteFilter = false;
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _debounce?.cancel();
-    super.dispose();
-  }
-
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      ref.read(searchQueryProvider.notifier).setQuery(query);
-    });
-  }
+  const _ModeChip({required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final filteredPhotosAsync = ref.watch(filteredPhotosProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Smart Travel Companion'),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _isFavoriteFilter ? Icons.favorite : Icons.favorite_border,
-              color: _isFavoriteFilter ? Colors.red : null,
-            ),
-            onPressed: () {
-              setState(() {
-                _isFavoriteFilter = !_isFavoriteFilter;
-              });
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                labelText: 'Search Places',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Icon(Icons.search),
-              ),
-            ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => ref.refresh(photosProvider.future),
-              child: filteredPhotosAsync.when(
-                data: (photos) {
-                  final favorites = ref.watch(favoritesProvider);
-
-                  var displayPhotos = photos;
-                  if (_isFavoriteFilter) {
-                    displayPhotos = displayPhotos.where((p) => favorites.contains(p.id)).toList();
-                  }
-
-                  if (displayPhotos.isEmpty) {
-                    return ListView(
-                      children: const [
-                        SizedBox(height: 100),
-                        Center(child: Text('No places found.')),
-                      ],
-                    );
-                  }
-
-                  return AnimatedList(
-                    initialItemCount: displayPhotos.length,
-                    itemBuilder: (context, index, animation) {
-                      if (index >= displayPhotos.length) return const SizedBox.shrink();
-                      final photo = displayPhotos[index];
-                      final isFav = favorites.contains(photo.id);
-
-                      return SlideTransition(
-                        position: animation.drive(
-                          Tween(
-                            begin: const Offset(1, 0),
-                            end: Offset.zero,
-                          ).chain(CurveTween(curve: Curves.easeOut)),
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            context.push('/detail', extra: photo);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[800] : Colors.white,
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black12, blurRadius: 4, spreadRadius: 1),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Hero(
-                                  tag: 'photo_${photo.id}',
-                                  child: ClipRRect(
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(15),
-                                      bottomLeft: Radius.circular(15),
-                                    ),
-                                    child: CachedNetworkImage(
-                                      imageUrl: photo.thumbnailUrl,
-                                      width: 100,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
-                                        width: 100,
-                                        height: 100,
-                                        color: Colors.grey[300],
-                                        child: const Center(child: CircularProgressIndicator()),
-                                      ),
-                                      errorWidget: (context, url, error) => const Icon(Icons.error),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                    child: Text(
-                                      photo.title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 300),
-                                    transitionBuilder: (child, animation) =>
-                                        ScaleTransition(scale: animation, child: child),
-                                    child: Icon(
-                                      isFav ? Icons.favorite : Icons.favorite_border,
-                                      key: ValueKey<bool>(isFav),
-                                      color: isFav ? Colors.red : Colors.grey,
-                                    ),
-                                  ),
-                                  onPressed: () {
-                                    ref.read(favoritesProvider.notifier).toggleFavorite(photo.id);
-                                  },
-                                ),
-                                const SizedBox(width: 5),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stack) => ListView(
-                  children: [
-                    SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline, size: 48, color: Colors.grey),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Failed to fetch data.\n${error.toString()}',
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 20),
-                          ElevatedButton(
-                            onPressed: () => ref.refresh(photosProvider.future),
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return ChoiceChip(label: Text(label), selected: selected, onSelected: (_) => onTap());
   }
 }

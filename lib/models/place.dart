@@ -12,6 +12,63 @@ class WeatherSnapshot {
     required this.humidity,
     required this.feelsLike,
   });
+
+  factory WeatherSnapshot.fromOpenMeteo(Map<String, dynamic> currentWeather) {
+    final temperature = (currentWeather['temperature_2m'] as num?)?.toDouble() ?? 0;
+    final windSpeed = (currentWeather['wind_speed_10m'] as num?)?.toDouble() ?? 0;
+    final humidity = (currentWeather['relative_humidity_2m'] as num?)?.round() ?? 0;
+    final feelsLike = (currentWeather['apparent_temperature'] as num?)?.toDouble() ?? temperature;
+    final weatherCode = (currentWeather['weather_code'] as num?)?.toInt() ?? 0;
+
+    return WeatherSnapshot(
+      temperature: temperature,
+      conditions: _weatherConditionFromCode(weatherCode),
+      windSpeed: windSpeed,
+      humidity: humidity,
+      feelsLike: feelsLike,
+    );
+  }
+}
+
+String _weatherConditionFromCode(int weatherCode) {
+  switch (weatherCode) {
+    case 0:
+      return 'Clear sky';
+    case 1:
+    case 2:
+    case 3:
+      return 'Partly cloudy';
+    case 45:
+    case 48:
+      return 'Foggy';
+    case 51:
+    case 53:
+    case 55:
+    case 56:
+    case 57:
+      return 'Drizzle';
+    case 61:
+    case 63:
+    case 65:
+    case 66:
+    case 67:
+      return 'Rainy';
+    case 71:
+    case 73:
+    case 75:
+    case 77:
+      return 'Snowy';
+    case 80:
+    case 81:
+    case 82:
+      return 'Showers';
+    case 95:
+    case 96:
+    case 99:
+      return 'Stormy';
+    default:
+      return 'Variable conditions';
+  }
 }
 
 class TravelPlace {
@@ -22,7 +79,8 @@ class TravelPlace {
   final String category;
   final String description;
   final String imageUrl;
-  final WeatherSnapshot weather;
+  final double latitude;
+  final double longitude;
   final bool isFeatured;
 
   const TravelPlace({
@@ -33,11 +91,15 @@ class TravelPlace {
     required this.category,
     required this.description,
     required this.imageUrl,
-    required this.weather,
+    required this.latitude,
+    required this.longitude,
     this.isFeatured = false,
   });
 
   String get locationLabel => '$region, $country';
+
+  String get aboutSummary =>
+      '$name is a ${category.toLowerCase()} destination in $locationLabel, ideal for travelers who want a memorable scenic stop.';
 
   bool matchesQuery(String query) {
     if (query.isEmpty) {

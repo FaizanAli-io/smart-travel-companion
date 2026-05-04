@@ -44,7 +44,15 @@ class AppShellScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         top: false,
-        child: IndexedStack(index: selectedTab, children: pages),
+        child: IndexedStack(
+          index: selectedTab,
+          children: [
+            HeroMode(enabled: selectedTab == 0, child: pages[0]),
+            HeroMode(enabled: selectedTab == 1, child: pages[1]),
+            HeroMode(enabled: selectedTab == 2, child: pages[2]),
+            HeroMode(enabled: selectedTab == 3, child: pages[3]),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {

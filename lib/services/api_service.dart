@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/place.dart';
 import '../models/photo.dart';
 
 class ApiService {
   static const String _photosUrl = 'https://jsonplaceholder.typicode.com/photos';
+  static const String _weatherUrl = 'https://api.open-meteo.com/v1/forecast';
 
   Future<List<Photo>> fetchPhotos({bool refresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -37,14 +39,30 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> fetchWeather() async {
-    // Basic weather request for a fixed location (e.g., coordinates for a sample place)
-    final url =
-        'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true';
+  Future<WeatherSnapshot> fetchWeather({
+    required double latitude,
+    required double longitude,
+  }) async {
+    final uri = Uri.parse(_weatherUrl).replace(
+      queryParameters: {
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'current':
+            'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code',
+        'timezone': 'auto',
+      },
+    );
+
     try {
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(uri);
       if (response.statusCode == 200) {
-        return jsonDecode(response.body)['current_weather'];
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final currentWeather = decoded['current'] as Map<String, dynamic>?;
+        if (currentWeather == null) {
+          throw Exception('Weather payload is missing current conditions');
+        }
+
+        return WeatherSnapshot.fromOpenMeteo(currentWeather);
       } else {
         throw Exception('Failed to load weather');
       }

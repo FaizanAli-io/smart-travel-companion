@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/place.dart';
 import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
 
@@ -16,7 +17,9 @@ class DetailScreen extends ConsumerStatefulWidget {
   ConsumerState<DetailScreen> createState() => _DetailScreenState();
 }
 
-class _DetailScreenState extends ConsumerState<DetailScreen> {
+class _DetailScreenState extends ConsumerState<DetailScreen> with TickerProviderStateMixin {
+  bool _isAboutExpanded = true;
+
   @override
   void initState() {
     super.initState();
@@ -29,6 +32,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   Widget build(BuildContext context) {
     final place = ref.watch(placeByIdProvider(widget.placeId));
     final isFavorite = ref.watch(favoritesProvider).contains(widget.placeId);
+    final weatherAsync = ref.watch(placeWeatherProvider(widget.placeId));
 
     if (place == null) {
       return Scaffold(
@@ -151,12 +155,77 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                         style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        place.description,
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          height: 1.7,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeInOut,
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    height: 42,
+                                    width: 42,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: const Icon(
+                                      Icons.info_outline_rounded,
+                                      color: AppColors.primary,
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      place.aboutSummary,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        height: 1.55,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isAboutExpanded = !_isAboutExpanded;
+                                      });
+                                    },
+                                    icon: AnimatedRotation(
+                                      duration: const Duration(milliseconds: 200),
+                                      turns: _isAboutExpanded ? 0.5 : 0,
+                                      child: const Icon(Icons.expand_more_rounded),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_isAboutExpanded) ...[
+                                const SizedBox(height: 14),
+                                Text(
+                                  place.description,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 15,
+                                    height: 1.7,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withValues(alpha: 0.78),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 22),
@@ -174,74 +243,20 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                             color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
                           ),
                         ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  height: 58,
-                                  width: 58,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Icon(
-                                    Icons.thermostat_rounded,
-                                    color: AppColors.primary,
-                                    size: 34,
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${place.weather.temperature.toStringAsFixed(0)}°C',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        place.weather.conditions,
-                                        style: GoogleFonts.poppins(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurface.withValues(alpha: 0.64),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: weatherAsync.when(
+                            loading: () => const _WeatherLoading(key: ValueKey('weather-loading')),
+                            error: (error, _) => _WeatherError(
+                              key: const ValueKey('weather-error'),
+                              message: error.toString(),
+                              onRetry: () => ref.invalidate(placeWeatherProvider(widget.placeId)),
                             ),
-                            const SizedBox(height: 18),
-                            GridView.count(
-                              crossAxisCount: 2,
-                              shrinkWrap: true,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              physics: const NeverScrollableScrollPhysics(),
-                              childAspectRatio: 1.9,
-                              children: [
-                                _WeatherMetric(
-                                  label: 'Wind',
-                                  value: '${place.weather.windSpeed.toStringAsFixed(0)} km/h',
-                                ),
-                                _WeatherMetric(
-                                  label: 'Humidity',
-                                  value: '${place.weather.humidity}%',
-                                ),
-                                _WeatherMetric(
-                                  label: 'Feels like',
-                                  value: '${place.weather.feelsLike.toStringAsFixed(0)}°C',
-                                ),
-                                _WeatherMetric(label: 'Condition', value: place.weather.conditions),
-                              ],
+                            data: (weather) => _WeatherContent(
+                              key: const ValueKey('weather-content'),
+                              weather: weather,
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ],
@@ -259,7 +274,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: () {
+                    ref.read(selectedMapPlaceIdProvider.notifier).state = place.id;
+                    ref.read(selectedShellTabProvider.notifier).state = 1;
+                    context.go('/');
+                  },
                   icon: const Icon(Icons.map_rounded),
                   label: const Text('View on Map'),
                 ),
@@ -326,6 +345,111 @@ class _WeatherMetric extends StatelessWidget {
           Text(value, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700)),
         ],
       ),
+    );
+  }
+}
+
+class _WeatherLoading extends StatelessWidget {
+  const _WeatherLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(height: 170, child: Center(child: CircularProgressIndicator()));
+  }
+}
+
+class _WeatherError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _WeatherError({super.key, required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 170,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Unable to load live weather.',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: GoogleFonts.poppins(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.62),
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeatherContent extends StatelessWidget {
+  final WeatherSnapshot weather;
+
+  const _WeatherContent({super.key, required this.weather});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              height: 58,
+              width: 58,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(Icons.thermostat_rounded, color: AppColors.primary, size: 34),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${weather.temperature.toStringAsFixed(0)}°C',
+                    style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    weather.conditions,
+                    style: GoogleFonts.poppins(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.64),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.9,
+          children: [
+            _WeatherMetric(label: 'Wind', value: '${weather.windSpeed.toStringAsFixed(0)} km/h'),
+            _WeatherMetric(label: 'Humidity', value: '${weather.humidity}%'),
+            _WeatherMetric(label: 'Feels like', value: '${weather.feelsLike.toStringAsFixed(0)}°C'),
+            _WeatherMetric(label: 'Condition', value: weather.conditions),
+          ],
+        ),
+      ],
     );
   }
 }

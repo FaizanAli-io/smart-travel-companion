@@ -1,15 +1,30 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 
 import '../data/sample_places.dart';
 import '../models/place.dart';
+import '../services/api_service.dart';
 
 enum HomeFeedMode { all, favorites, recent }
 
-final placesProvider = Provider<List<TravelPlace>>((ref) => samplePlaces);
+class MapLocationData {
+  final String label;
+  final double latitude;
+  final double longitude;
 
-final searchQueryProvider = StateProvider<String>((ref) => 'Lake');
+  const MapLocationData({required this.label, required this.latitude, required this.longitude});
+}
+
+final placesProvider = Provider<List<TravelPlace>>((ref) => samplePlaces);
+final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+final karachiLocationProvider = Provider<MapLocationData>(
+  (ref) => const MapLocationData(label: 'Karachi, Pakistan', latitude: 24.8607, longitude: 67.0011),
+);
+
+final searchQueryProvider = StateProvider<String>((ref) => '');
 final homeFeedModeProvider = StateProvider<HomeFeedMode>((ref) => HomeFeedMode.all);
 final selectedRegionProvider = StateProvider<String?>((ref) => null);
 final selectedSortProvider = StateProvider<PlaceSortOption>((ref) => PlaceSortOption.recommended);
@@ -17,6 +32,7 @@ final showFavoritesOnlyProvider = StateProvider<bool>((ref) => false);
 final offlineModeProvider = StateProvider<bool>((ref) => false);
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 final selectedShellTabProvider = StateProvider<int>((ref) => 0);
+final selectedMapPlaceIdProvider = StateProvider<int?>((ref) => null);
 
 final favoritesProvider = NotifierProvider<FavoritesNotifier, Set<int>>(FavoritesNotifier.new);
 
@@ -68,6 +84,16 @@ final placeByIdProvider = Provider.family<TravelPlace?, int>((ref, id) {
     }
   }
   return null;
+});
+
+final placeWeatherProvider = FutureProvider.family<WeatherSnapshot, int>((ref, placeId) async {
+  final place = ref.watch(placeByIdProvider(placeId));
+  if (place == null) {
+    throw Exception('Place not found');
+  }
+
+  final apiService = ref.watch(apiServiceProvider);
+  return apiService.fetchWeather(latitude: place.latitude, longitude: place.longitude);
 });
 
 List<TravelPlace> _sortPlaces(List<TravelPlace> places, PlaceSortOption sortOption) {
@@ -173,4 +199,60 @@ final favoritePlacesProvider = Provider<List<TravelPlace>>((ref) {
   final places = ref.watch(placesProvider);
   final favoriteIds = ref.watch(favoritesProvider);
   return places.where((place) => favoriteIds.contains(place.id)).toList();
+});
+
+double _degreesToRadians(double degrees) => degrees * math.pi / 180;
+
+double distanceKmBetweenPoints(
+  double latitude1,
+  double longitude1,
+  double latitude2,
+  double longitude2,
+) {
+  const earthRadiusKm = 6371.0;
+
+  final latitudeDelta = _degreesToRadians(latitude2 - latitude1);
+  final longitudeDelta = _degreesToRadians(longitude2 - longitude1);
+  final latitude1Radians = _degreesToRadians(latitude1);
+  final latitude2Radians = _degreesToRadians(latitude2);
+
+  final haversine =
+      math.sin(latitudeDelta / 2) * math.sin(latitudeDelta / 2) +
+      math.cos(latitude1Radians) *
+          math.cos(latitude2Radians) *
+          math.sin(longitudeDelta / 2) *
+          math.sin(longitudeDelta / 2);
+  final arc = 2 * math.atan2(math.sqrt(haversine), math.sqrt(1 - haversine));
+  return earthRadiusKm * arc;
+}
+
+double distanceFromKarachiKm(TravelPlace place, MapLocationData location) {
+  return distanceKmBetweenPoints(
+    location.latitude,
+    location.longitude,
+    place.latitude,
+    place.longitude,
+  );
+}
+
+final nearestPlacesProvider = Provider<List<TravelPlace>>((ref) {
+  final places = ref.watch(placesProvider);
+  final location = ref.watch(karachiLocationProvider);
+
+  final sortedPlaces = [...places]
+    ..sort(
+      (left, right) =>
+          distanceFromKarachiKm(left, location).compareTo(distanceFromKarachiKm(right, location)),
+    );
+
+  return sortedPlaces.take(5).toList();
+});
+
+final selectedMapPlaceProvider = Provider<TravelPlace?>((ref) {
+  final selectedId = ref.watch(selectedMapPlaceIdProvider);
+  if (selectedId == null) {
+    return null;
+  }
+
+  return ref.watch(placeByIdProvider(selectedId));
 });

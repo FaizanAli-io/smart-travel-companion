@@ -12,22 +12,46 @@ class InfoScreen extends StatelessWidget {
       'downloaded' => (
         title: 'Downloaded',
         subtitle: 'Your saved cache and offline-ready destinations live here.',
-        items: ['Lake Tekapo offline pack', 'Banff route notes', 'Amalfi photo cache'],
+        items: [
+          ('Lake Tekapo offline pack', 'Offline photos, notes, and map context for Lake Tekapo.'),
+          ('Banff route notes', 'Trail ideas and saved trip details for Banff National Park.'),
+          ('Amalfi photo cache', 'Cached imagery and travel notes for the Amalfi Coast.'),
+        ],
       ),
       'settings' => (
         title: 'Settings',
         subtitle: 'Adjust notifications, language, privacy, and map preferences.',
-        items: ['Notifications', 'Language', 'Privacy', 'Map style'],
+        items: [
+          ('Notifications', 'Control alerts for favorites, downloads, and trip reminders.'),
+          ('Language', 'Change the app language from the profile and drawer controls.'),
+          ('Privacy', 'Manage location access, analytics, and cached history preferences.'),
+          ('Map style', 'Switch between light, dark, and satellite-style map views.'),
+        ],
       ),
       'help' => (
         title: 'Help & Support',
         subtitle: 'Find answers or reach out if you need help planning your next trip.',
-        items: ['FAQ', 'Contact support', 'Report a problem', 'Travel tips'],
+        items: [
+          ('FAQ', 'Quick answers to common questions about search, favorites, and offline mode.'),
+          ('Contact support', 'Email the support team for account or trip-planning help.'),
+          ('Report a problem', 'Share a bug report if something does not load or behaves oddly.'),
+          ('Travel tips', 'Get ideas for planning, saving, and comparing destinations.'),
+        ],
       ),
       _ => (
         title: 'About Us',
         subtitle: 'Smart Travel Companion helps you discover, save, and compare memorable places.',
-        items: ['Curated destinations', 'Offline-ready cache', 'Dark mode and personalization'],
+        items: [
+          (
+            'Curated destinations',
+            'A handpicked set of places with rich imagery and trip details.',
+          ),
+          ('Offline-ready cache', 'Saved data stays available when the connection is unavailable.'),
+          (
+            'Dark mode and personalization',
+            'Theme controls and saved preferences tailor the experience.',
+          ),
+        ],
       ),
     };
 
@@ -46,11 +70,27 @@ class InfoScreen extends StatelessWidget {
           ...details.items.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
+              child: ExpansionTile(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                tileColor: Theme.of(context).colorScheme.surface,
+                collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                collapsedBackgroundColor: Theme.of(context).colorScheme.surface,
                 leading: const Icon(Icons.arrow_right_rounded),
-                title: Text(item, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                title: Text(item.$1, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      item.$2,
+                      style: GoogleFonts.poppins(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

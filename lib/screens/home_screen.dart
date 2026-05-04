@@ -18,123 +18,131 @@ class HomeScreen extends ConsumerWidget {
     final homeFeedMode = ref.watch(homeFeedModeProvider);
     final offlineMode = ref.watch(offlineModeProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      children: [
-        if (offlineMode) ...[
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.wifi_off_rounded, color: AppColors.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Offline mode is active. Cached places are still available.',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(homePlacesProvider);
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        children: [
+          if (offlineMode) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.wifi_off_rounded, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Offline mode is active. Cached places are still available.',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
+          GestureDetector(
+            onTap: () => context.push('/search'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.55)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Search places',
+                      style: GoogleFonts.poppins(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.58),
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.tune_rounded),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 18),
-        ],
-        GestureDetector(
-          onTap: () => context.push('/search'),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.55)),
-            ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Search places',
-                    style: GoogleFonts.poppins(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.58),
-                      fontSize: 15,
-                    ),
-                  ),
+                _ModeChip(
+                  label: 'All',
+                  selected: homeFeedMode == HomeFeedMode.all,
+                  onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.all,
                 ),
-                const Icon(Icons.tune_rounded),
+                const SizedBox(width: 10),
+                _ModeChip(
+                  label: 'Favorites',
+                  selected: homeFeedMode == HomeFeedMode.favorites,
+                  onTap: () =>
+                      ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.favorites,
+                ),
+                const SizedBox(width: 10),
+                _ModeChip(
+                  label: 'Recent',
+                  selected: homeFeedMode == HomeFeedMode.recent,
+                  onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.recent,
+                ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 18),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _ModeChip(
-                label: 'All',
-                selected: homeFeedMode == HomeFeedMode.all,
-                onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.all,
-              ),
-              const SizedBox(width: 10),
-              _ModeChip(
-                label: 'Favorites',
-                selected: homeFeedMode == HomeFeedMode.favorites,
-                onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.favorites,
-              ),
-              const SizedBox(width: 10),
-              _ModeChip(
-                label: 'Recent',
-                selected: homeFeedMode == HomeFeedMode.recent,
-                onTap: () => ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.recent,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 22),
-        if (places.isEmpty)
-          EmptyStateView(
-            onClearFilters: () {
-              ref.read(searchQueryProvider.notifier).state = '';
-              ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.all;
-            },
-          )
-        else ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                homeFeedMode == HomeFeedMode.recent ? 'Recently viewed' : 'Discover places',
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
-              ),
-              Text(
-                '${places.length} results',
-                style: GoogleFonts.poppins(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
-                  fontSize: 12,
+          const SizedBox(height: 22),
+          if (places.isEmpty)
+            EmptyStateView(
+              onClearFilters: () {
+                ref.read(searchQueryProvider.notifier).state = '';
+                ref.read(homeFeedModeProvider.notifier).state = HomeFeedMode.all;
+              },
+            )
+          else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  homeFeedMode == HomeFeedMode.recent ? 'Recently viewed' : 'Discover places',
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  '${places.length} results',
+                  style: GoogleFonts.poppins(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...places.map(
+              (place) => Padding(
+                padding: const EdgeInsets.only(bottom: 18),
+                child: PlaceCard(
+                  place: place,
+                  isFavorite: favoriteIds.contains(place.id),
+                  onTap: () => context.push('/detail/${place.id}'),
+                  onFavoriteToggle: () =>
+                      ref.read(favoritesProvider.notifier).toggleFavorite(place.id),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...places.map(
-            (place) => Padding(
-              padding: const EdgeInsets.only(bottom: 18),
-              child: PlaceCard(
-                place: place,
-                isFavorite: favoriteIds.contains(place.id),
-                onTap: () => context.push('/detail/${place.id}'),
-                onFavoriteToggle: () =>
-                    ref.read(favoritesProvider.notifier).toggleFavorite(place.id),
-              ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

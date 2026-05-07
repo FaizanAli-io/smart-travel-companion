@@ -1,42 +1,102 @@
 import 'dart:convert';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/sample_places.dart';
 import '../models/place.dart';
-import '../models/photo.dart';
 
 class ApiService {
   static const String _photosUrl = 'https://jsonplaceholder.typicode.com/photos';
   static const String _weatherUrl = 'https://api.open-meteo.com/v1/forecast';
+  static const String _placesCacheKey = 'cached_places';
+  static const int _offlineCacheSize = 8;
 
-  Future<List<Photo>> fetchPhotos({bool refresh = false}) async {
+  Future<List<TravelPlace>> fetchPlaces({bool refresh = false, bool forceOffline = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final cacheKey = 'cached_photos';
-
-    if (!refresh) {
-      final cachedData = prefs.getString(cacheKey);
-      if (cachedData != null) {
-        final List<dynamic> jsonList = jsonDecode(cachedData);
-        return jsonList.map((json) => Photo.fromJson(json)).toList();
-      }
-    }
+    final cachedPlaces = _readCachedPlaces(prefs);
 
     try {
-      final response = await http.get(Uri.parse('$_photosUrl?_limit=50'));
-      if (response.statusCode == 200) {
-        prefs.setString(cacheKey, response.body);
-        final List<dynamic> jsonList = jsonDecode(response.body);
-        return jsonList.map((json) => Photo.fromJson(json)).toList();
+      if (forceOffline) {
+        return cachedPlaces.isNotEmpty ? cachedPlaces : _seedOfflinePlaces();
+      }
+
+      if (refresh) {
+        final freshPlaces = await _fetchRemotePlaces();
+        if (freshPlaces.isNotEmpty) {
+          await prefs.setString(
+            _placesCacheKey,
+            jsonEncode(freshPlaces.map((place) => place.toJson()).toList()),
+          );
+          return freshPlaces;
+        }
+
+        if (cachedPlaces.isNotEmpty) {
+          return cachedPlaces;
+        }
+
+        return _seedOfflinePlaces();
+      }
+
+      final connectivityResults = await Connectivity().checkConnectivity();
+      final isConnected = connectivityResults.any((result) => result != ConnectivityResult.none);
+
+      if (!isConnected) {
+        return cachedPlaces.isNotEmpty ? cachedPlaces : _seedOfflinePlaces();
+      }
+
+      final freshPlaces = await _fetchRemotePlaces();
+      if (freshPlaces.isNotEmpty) {
+        await prefs.setString(
+          _placesCacheKey,
+          jsonEncode(freshPlaces.map((place) => place.toJson()).toList()),
+        );
+        return freshPlaces;
       } else {
-        throw Exception('Failed to load photos');
+        return cachedPlaces.isNotEmpty ? cachedPlaces : _seedOfflinePlaces();
       }
     } catch (e) {
-      final cachedData = prefs.getString(cacheKey);
-      if (cachedData != null) {
-        final List<dynamic> jsonList = jsonDecode(cachedData);
-        return jsonList.map((json) => Photo.fromJson(json)).toList();
+      if (cachedPlaces.isNotEmpty) {
+        return cachedPlaces;
       }
-      throw Exception('Network error and no cached data available');
+
+      return _seedOfflinePlaces();
     }
+  }
+
+  List<TravelPlace> _readCachedPlaces(SharedPreferences prefs) {
+    final cachedData = prefs.getString(_placesCacheKey);
+    if (cachedData == null) {
+      return const [];
+    }
+
+    final decoded = jsonDecode(cachedData) as List<dynamic>;
+    return decoded.map((entry) => TravelPlace.fromJson(entry as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<TravelPlace>> _fetchRemotePlaces() async {
+    final response = await http.get(Uri.parse('$_photosUrl?_limit=$_offlineCacheSize'));
+    if (response.statusCode != 200) {
+      return const [];
+    }
+
+    final decoded = jsonDecode(response.body) as List<dynamic>;
+    final photoIds = decoded
+        .map((entry) => (entry as Map<String, dynamic>)['id'])
+        .whereType<num>()
+        .map((id) => id.toInt())
+        .toSet();
+
+    final selectedPlaces = samplePlaces.where((place) => photoIds.contains(place.id)).toList();
+    if (selectedPlaces.isEmpty) {
+      return samplePlaces.take(_offlineCacheSize).toList();
+    }
+
+    return selectedPlaces;
+  }
+
+  List<TravelPlace> _seedOfflinePlaces() {
+    return samplePlaces.take(_offlineCacheSize).toList();
   }
 
   Future<WeatherSnapshot> fetchWeather({

@@ -101,6 +101,36 @@ class TravelPlace {
   String get aboutSummary =>
       '$name is a ${category.toLowerCase()} destination in $locationLabel, ideal for travelers who want a memorable scenic stop.';
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'region': region,
+      'country': country,
+      'category': category,
+      'description': description,
+      'imageUrl': imageUrl,
+      'latitude': latitude,
+      'longitude': longitude,
+      'isFeatured': isFeatured,
+    };
+  }
+
+  factory TravelPlace.fromJson(Map<String, dynamic> json) {
+    return TravelPlace(
+      id: (json['id'] as num).toInt(),
+      name: json['name'] as String? ?? '',
+      region: json['region'] as String? ?? '',
+      country: json['country'] as String? ?? '',
+      category: json['category'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+      isFeatured: json['isFeatured'] as bool? ?? false,
+    );
+  }
+
   bool matchesQuery(String query) {
     if (query.isEmpty) {
       return true;

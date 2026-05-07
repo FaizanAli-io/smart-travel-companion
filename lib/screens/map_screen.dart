@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +17,7 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
   final List<int> _visiblePlaceIds = [];
+  int _lastAnimatedCount = 0;
 
   @override
   void initState() {
@@ -27,13 +26,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _animateNearestPlaces() async {
-    final nearestPlaces = ref.read(nearestPlacesProvider);
+    final nearestPlacesAsync = ref.read(nearestPlacesProvider);
+    final nearestPlaces = nearestPlacesAsync.maybeWhen(
+      data: (places) => places,
+      orElse: () => <TravelPlace>[],
+    );
+
     if (!mounted) {
       return;
     }
 
     setState(() {
       _visiblePlaceIds.clear();
+      _lastAnimatedCount = nearestPlaces.length;
     });
 
     for (var index = 0; index < nearestPlaces.length; index++) {
@@ -49,296 +54,341 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _handleRefresh() async {
+    final refreshedPlaces = await ref.refresh(placesProvider.future);
+    if (refreshedPlaces.isEmpty) {
+      return;
+    }
     await _animateNearestPlaces();
   }
 
   @override
   Widget build(BuildContext context) {
     final currentLocation = ref.watch(karachiLocationProvider);
-    final nearestPlaces = ref.watch(nearestPlacesProvider);
+    final nearestPlacesAsync = ref.watch(nearestPlacesProvider);
     final selectedPlace = ref.watch(selectedMapPlaceProvider);
-    final focusPlace = selectedPlace ?? nearestPlaces.firstOrNull;
-    final visibleMarkers = <TravelPlace>{...nearestPlaces};
-    if (selectedPlace != null) {
-      visibleMarkers.add(selectedPlace);
-    }
 
     return RefreshIndicator(
       onRefresh: _handleRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: Theme.of(context).brightness == Brightness.dark
-                    ? [const Color(0xFF20283A), const Color(0xFF111827)]
-                    : [const Color(0xFFF1F4FF), const Color(0xFFDCE3FF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(32),
+      child: nearestPlacesAsync.when(
+        loading: () => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          children: const [
+            SizedBox(height: 120),
+            Center(child: CircularProgressIndicator()),
+          ],
+        ),
+        error: (error, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          children: [
+            Text(
+              'Unable to load nearby places.',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+            const SizedBox(height: 10),
+            Text(error.toString(), style: GoogleFonts.poppins(fontSize: 12)),
+          ],
+        ),
+        data: (nearestPlaces) {
+          if (_lastAnimatedCount != nearestPlaces.length && nearestPlaces.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _animateNearestPlaces());
+          }
+
+          TravelPlace? focusPlace = selectedPlace;
+          if (focusPlace == null && nearestPlaces.isNotEmpty) {
+            focusPlace = nearestPlaces.first;
+          }
+
+          final visibleMarkers = <TravelPlace>{...nearestPlaces};
+          if (selectedPlace != null) {
+            visibleMarkers.add(selectedPlace);
+          }
+
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: Theme.of(context).brightness == Brightness.dark
+                        ? [const Color(0xFF20283A), const Color(0xFF111827)]
+                        : [const Color(0xFFF1F4FF), const Color(0xFFDCE3FF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(
-                          'Your map view',
-                          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Your map view',
+                              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              currentLocation.label,
+                              style: GoogleFonts.poppins(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          currentLocation.label,
-                          style: GoogleFonts.poppins(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '${nearestPlaces.length} nearest places',
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${nearestPlaces.length} nearest places',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 300,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _WorldMapPainter(
+                                  gridColor: AppColors.primary,
+                                  highlightColor: Theme.of(context).brightness == Brightness.dark
+                                      ? const Color(0xFF6E7BFF)
+                                      : const Color(0xFF8290FF),
+                                ),
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.white.withValues(alpha: 0.04),
+                                      Colors.black.withValues(alpha: 0.14),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            ...visibleMarkers.map((place) {
+                              final point = _projectPoint(
+                                place.latitude,
+                                place.longitude,
+                                currentLocation.latitude,
+                                currentLocation.longitude,
+                              );
+                              final isSelected = selectedPlace?.id == place.id;
+                              return Positioned(
+                                left: point.dx - 14,
+                                top: point.dy - 14,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    ref.read(selectedMapPlaceIdProvider.notifier).state = place.id;
+                                    context.push('/detail/${place.id}');
+                                  },
+                                  child: AnimatedScale(
+                                    duration: const Duration(milliseconds: 200),
+                                    scale: isSelected ? 1.12 : 1,
+                                    child: _DestinationPin(isSelected: isSelected),
+                                  ),
+                                ),
+                              );
+                            }),
+                            Positioned(
+                              left:
+                                  _projectPoint(
+                                    currentLocation.latitude,
+                                    currentLocation.longitude,
+                                    currentLocation.latitude,
+                                    currentLocation.longitude,
+                                  ).dx -
+                                  18,
+                              top:
+                                  _projectPoint(
+                                    currentLocation.latitude,
+                                    currentLocation.longitude,
+                                    currentLocation.latitude,
+                                    currentLocation.longitude,
+                                  ).dy -
+                                  18,
+                              child: const _CurrentLocationPin(),
+                            ),
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              bottom: 16,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _MapOverlayChip(
+                                      icon: Icons.my_location_rounded,
+                                      label: currentLocation.label,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _MapOverlayChip(
+                                      icon: Icons.place_rounded,
+                                      label: focusPlace == null
+                                          ? 'Tap a pin to focus'
+                                          : focusPlace.name,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 300,
-                  child: ClipRRect(
+              ),
+              const SizedBox(height: 20),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Nearest recommendations',
+                      style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Top five places ranked from Karachi, Pakistan.',
+                      style: GoogleFonts.poppins(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.64),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    AnimatedList(
+                      key: _listKey,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      initialItemCount: _visiblePlaceIds.length,
+                      itemBuilder: (context, index, animation) {
+                        final place = nearestPlaces[index];
+                        final distanceKm = distanceFromKarachiKm(place, currentLocation);
+                        final isSelected = selectedPlace?.id == place.id;
+                        return SizeTransition(
+                          sizeFactor: animation,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 220),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.primary.withValues(alpha: 0.08)
+                                    : Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppColors.primary.withValues(alpha: 0.4)
+                                      : Theme.of(context).dividerColor.withValues(alpha: 0.24),
+                                ),
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                leading: CircleAvatar(
+                                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: GoogleFonts.poppins(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  place.name,
+                                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: Text(
+                                  '${place.locationLabel} • ${distanceKm.toStringAsFixed(0)} km away',
+                                  style: GoogleFonts.poppins(),
+                                ),
+                                trailing: const Icon(Icons.chevron_right_rounded),
+                                onTap: () {
+                                  ref.read(selectedMapPlaceIdProvider.notifier).state = place.id;
+                                  context.push('/detail/${place.id}');
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (focusPlace != null)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 260),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(28),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: _WorldMapPainter(
-                              gridColor: AppColors.primary,
-                              highlightColor: Theme.of(context).brightness == Brightness.dark
-                                  ? const Color(0xFF6E7BFF)
-                                  : const Color(0xFF8290FF),
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.04),
-                                  Colors.black.withValues(alpha: 0.14),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        ...visibleMarkers.map((place) {
-                          final point = _projectPoint(
-                            place.latitude,
-                            place.longitude,
-                            currentLocation.latitude,
-                            currentLocation.longitude,
-                          );
-                          final isSelected = selectedPlace?.id == place.id;
-                          return Positioned(
-                            left: point.dx - 14,
-                            top: point.dy - 14,
-                            child: GestureDetector(
-                              onTap: () {
-                                ref.read(selectedMapPlaceIdProvider.notifier).state = place.id;
-                                context.push('/detail/${place.id}');
-                              },
-                              child: AnimatedScale(
-                                duration: const Duration(milliseconds: 200),
-                                scale: isSelected ? 1.12 : 1,
-                                child: _DestinationPin(isSelected: isSelected),
-                              ),
-                            ),
-                          );
-                        }),
-                        Positioned(
-                          left:
-                              _projectPoint(
-                                currentLocation.latitude,
-                                currentLocation.longitude,
-                                currentLocation.latitude,
-                                currentLocation.longitude,
-                              ).dx -
-                              18,
-                          top:
-                              _projectPoint(
-                                currentLocation.latitude,
-                                currentLocation.longitude,
-                                currentLocation.latitude,
-                                currentLocation.longitude,
-                              ).dy -
-                              18,
-                          child: const _CurrentLocationPin(),
-                        ),
-                        Positioned(
-                          left: 16,
-                          right: 16,
-                          bottom: 16,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _MapOverlayChip(
-                                  icon: Icons.my_location_rounded,
-                                  label: currentLocation.label,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _MapOverlayChip(
-                                  icon: Icons.place_rounded,
-                                  label: focusPlace == null
-                                      ? 'Tap a pin to focus'
-                                      : focusPlace.name,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    border: Border.all(
+                      color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Nearest recommendations',
-                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Top five places ranked from Karachi, Pakistan.',
-                  style: GoogleFonts.poppins(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.64),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                AnimatedList(
-                  key: _listKey,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  initialItemCount: _visiblePlaceIds.length,
-                  itemBuilder: (context, index, animation) {
-                    final place = nearestPlaces[index];
-                    final distanceKm = distanceFromKarachiKm(place, currentLocation);
-                    final isSelected = selectedPlace?.id == place.id;
-                    return SizeTransition(
-                      sizeFactor: animation,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppColors.primary.withValues(alpha: 0.08)
-                                : Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.primary.withValues(alpha: 0.4)
-                                  : Theme.of(context).dividerColor.withValues(alpha: 0.24),
-                            ),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                              child: Text(
-                                '${index + 1}',
-                                style: GoogleFonts.poppins(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              place.name,
-                              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Text(
-                              '${place.locationLabel} • ${distanceKm.toStringAsFixed(0)} km away',
-                              style: GoogleFonts.poppins(),
-                            ),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () {
-                              ref.read(selectedMapPlaceIdProvider.notifier).state = place.id;
-                              context.push('/detail/${place.id}');
-                            },
-                          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Focused destination',
+                        style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        focusPlace.name,
+                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        focusPlace.description,
+                        style: GoogleFonts.poppins(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                          height: 1.6,
                         ),
                       ),
-                    );
-                  },
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          if (focusPlace != null)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.35)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Focused destination',
-                    style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    focusPlace.name,
-                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    focusPlace.description,
-                    style: GoogleFonts.poppins(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
-                      height: 1.6,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -490,8 +540,4 @@ Offset _projectPoint(
   final latitudeOffset = ((90.0 - latitude) / latitudeScale) * height;
 
   return Offset(longitudeOffset, latitudeOffset);
-}
-
-extension<T> on List<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

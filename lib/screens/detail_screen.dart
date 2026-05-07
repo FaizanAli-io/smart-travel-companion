@@ -30,263 +30,290 @@ class _DetailScreenState extends ConsumerState<DetailScreen> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
-    final place = ref.watch(placeByIdProvider(widget.placeId));
-    final isFavorite = ref.watch(favoritesProvider).contains(widget.placeId);
-    final weatherAsync = ref.watch(placeWeatherProvider(widget.placeId));
+    final placesAsync = ref.watch(placesProvider);
 
-    if (place == null) {
-      return Scaffold(
+    return placesAsync.when(
+      loading: () => Scaffold(
         appBar: AppBar(),
-        body: const Center(child: Text('Place not found.')),
-      );
-    }
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => Scaffold(
+        appBar: AppBar(),
+        body: Center(child: Text(error.toString())),
+      ),
+      data: (places) {
+        TravelPlace? place;
+        for (final candidate in places) {
+          if (candidate.id == widget.placeId) {
+            place = candidate;
+            break;
+          }
+        }
+        final currentPlace = place;
+        final isFavorite = ref.watch(favoritesProvider).contains(widget.placeId);
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 360,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Hero(
-                        tag: 'place_${place.id}',
-                        child: CachedNetworkImage(
-                          imageUrl: place.imageUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            child: const Center(child: CircularProgressIndicator()),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: Theme.of(context).colorScheme.surface,
-                            child: const Icon(Icons.image_not_supported_outlined, size: 42),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.08),
-                              Colors.black.withValues(alpha: 0.5),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _RoundActionButton(
-                                icon: Icons.arrow_back_rounded,
-                                onTap: () => context.pop(),
+        if (currentPlace == null) {
+          return Scaffold(
+            appBar: AppBar(),
+            body: const Center(child: Text('Place not found.')),
+          );
+        }
+
+        final placeData = currentPlace;
+
+        final weatherAsync = ref.watch(placeWeatherProvider(widget.placeId));
+
+        return Scaffold(
+          body: Stack(
+            children: [
+              CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 360,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Hero(
+                            tag: 'place_${placeData.id}',
+                            child: CachedNetworkImage(
+                              imageUrl: placeData.imageUrl,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: AppColors.primary.withValues(alpha: 0.12),
+                                child: const Center(child: CircularProgressIndicator()),
                               ),
-                              _RoundActionButton(
-                                icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-                                color: isFavorite ? AppColors.danger : Colors.white,
-                                onTap: () =>
-                                    ref.read(favoritesProvider.notifier).toggleFavorite(place.id),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 20,
-                        right: 20,
-                        bottom: 24,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                place.category,
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              errorWidget: (context, url, error) => Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                child: const Icon(Icons.image_not_supported_outlined, size: 42),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              place.name,
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.08),
+                                  Colors.black.withValues(alpha: 0.5),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              place.locationLabel,
-                              style: GoogleFonts.poppins(
-                                color: Colors.white.withValues(alpha: 0.86),
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 110),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'About the place',
-                        style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 12),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 240),
-                        curve: Curves.easeInOut,
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(
-                              color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                          SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Container(
-                                    height: 42,
-                                    width: 42,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: const Icon(
-                                      Icons.info_outline_rounded,
-                                      color: AppColors.primary,
-                                      size: 22,
-                                    ),
+                                  _RoundActionButton(
+                                    icon: Icons.arrow_back_rounded,
+                                    onTap: () => context.pop(),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      place.aboutSummary,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 15,
-                                        height: 1.55,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        _isAboutExpanded = !_isAboutExpanded;
-                                      });
-                                    },
-                                    icon: AnimatedRotation(
-                                      duration: const Duration(milliseconds: 200),
-                                      turns: _isAboutExpanded ? 0.5 : 0,
-                                      child: const Icon(Icons.expand_more_rounded),
-                                    ),
+                                  _RoundActionButton(
+                                    icon: isFavorite ? Icons.favorite : Icons.favorite_border,
+                                    color: isFavorite ? AppColors.danger : Colors.white,
+                                    onTap: () => ref
+                                        .read(favoritesProvider.notifier)
+                                        .toggleFavorite(placeData.id),
                                   ),
                                 ],
                               ),
-                              if (_isAboutExpanded) ...[
-                                const SizedBox(height: 14),
+                            ),
+                          ),
+                          Positioned(
+                            left: 20,
+                            right: 20,
+                            bottom: 24,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    placeData.category,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
                                 Text(
-                                  place.description,
+                                  placeData.name,
                                   style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  placeData.locationLabel,
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white.withValues(alpha: 0.86),
                                     fontSize: 15,
-                                    height: 1.7,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withValues(alpha: 0.78),
                                   ),
                                 ),
                               ],
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      Text(
-                        'Current Weather',
-                        style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(
-                            color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
-                          child: weatherAsync.when(
-                            loading: () => const _WeatherLoading(key: ValueKey('weather-loading')),
-                            error: (error, _) => _WeatherError(
-                              key: const ValueKey('weather-error'),
-                              message: error.toString(),
-                              onRetry: () => ref.invalidate(placeWeatherProvider(widget.placeId)),
-                            ),
-                            data: (weather) => _WeatherContent(
-                              key: const ValueKey('weather-content'),
-                              weather: weather,
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 110),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'About the place',
+                            style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 12),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 240),
+                            curve: Curves.easeInOut,
+                            child: Container(
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(
+                                  color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        height: 42,
+                                        width: 42,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                        child: const Icon(
+                                          Icons.info_outline_rounded,
+                                          color: AppColors.primary,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          placeData.aboutSummary,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 15,
+                                            height: 1.55,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _isAboutExpanded = !_isAboutExpanded;
+                                          });
+                                        },
+                                        icon: AnimatedRotation(
+                                          duration: const Duration(milliseconds: 200),
+                                          turns: _isAboutExpanded ? 0.5 : 0,
+                                          child: const Icon(Icons.expand_more_rounded),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_isAboutExpanded) ...[
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      placeData.description,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        height: 1.7,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface.withValues(alpha: 0.78),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          Text(
+                            'Current Weather',
+                            style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: weatherAsync.when(
+                                loading: () =>
+                                    const _WeatherLoading(key: ValueKey('weather-loading')),
+                                error: (error, _) => _WeatherError(
+                                  key: const ValueKey('weather-error'),
+                                  message: error.toString(),
+                                  onRetry: () =>
+                                      ref.invalidate(placeWeatherProvider(widget.placeId)),
+                                ),
+                                data: (weather) => _WeatherContent(
+                                  key: const ValueKey('weather-content'),
+                                  weather: weather,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 20,
+                child: SafeArea(
+                  top: false,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ref.read(selectedMapPlaceIdProvider.notifier).state = placeData.id;
+                        ref.read(selectedShellTabProvider.notifier).state = 1;
+                        context.go('/');
+                      },
+                      icon: const Icon(Icons.map_rounded),
+                      label: const Text('View on Map'),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 20,
-            child: SafeArea(
-              top: false,
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    ref.read(selectedMapPlaceIdProvider.notifier).state = place.id;
-                    ref.read(selectedShellTabProvider.notifier).state = 1;
-                    context.go('/');
-                  },
-                  icon: const Icon(Icons.map_rounded),
-                  label: const Text('View on Map'),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

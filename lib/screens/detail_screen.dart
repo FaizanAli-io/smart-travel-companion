@@ -61,6 +61,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> with TickerProvider
 
         final placeData = currentPlace;
 
+        final isOfflineSession = ref.watch(isOfflineSessionProvider);
         final weatherAsync = ref.watch(placeWeatherProvider(widget.placeId));
 
         return Scaffold(
@@ -266,23 +267,25 @@ class _DetailScreenState extends ConsumerState<DetailScreen> with TickerProvider
                                 color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
                               ),
                             ),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
-                              child: weatherAsync.when(
-                                loading: () =>
-                                    const _WeatherLoading(key: ValueKey('weather-loading')),
-                                error: (error, _) => _WeatherError(
-                                  key: const ValueKey('weather-error'),
-                                  message: error.toString(),
-                                  onRetry: () =>
-                                      ref.invalidate(placeWeatherProvider(widget.placeId)),
-                                ),
-                                data: (weather) => _WeatherContent(
-                                  key: const ValueKey('weather-content'),
-                                  weather: weather,
-                                ),
-                              ),
-                            ),
+                            child: isOfflineSession
+                                ? const _WeatherOfflineNotice()
+                                : AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 250),
+                                    child: weatherAsync.when(
+                                      loading: () =>
+                                          const _WeatherLoading(key: ValueKey('weather-loading')),
+                                      error: (error, _) => _WeatherError(
+                                        key: const ValueKey('weather-error'),
+                                        message: error.toString(),
+                                        onRetry: () =>
+                                            ref.invalidate(placeWeatherProvider(widget.placeId)),
+                                      ),
+                                      data: (weather) => _WeatherContent(
+                                        key: const ValueKey('weather-content'),
+                                        weather: weather,
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
@@ -350,9 +353,10 @@ class _WeatherMetric extends StatelessWidget {
   const _WeatherMetric({required this.label, required this.value});
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(18),
@@ -364,12 +368,54 @@ class _WeatherMetric extends StatelessWidget {
           Text(
             label,
             style: GoogleFonts.poppins(
-              fontSize: 12,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
               color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.62),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(value, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeatherOfflineNotice extends StatelessWidget {
+  const _WeatherOfflineNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 170,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.wifi_off_rounded, color: AppColors.primary, size: 34),
+          const SizedBox(height: 12),
+          Text(
+            'You are offline.',
+            style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Connect to the internet to load current weather for this destination.',
+            style: GoogleFonts.poppins(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.64),
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

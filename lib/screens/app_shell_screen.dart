@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../providers/app_providers.dart';
 import '../widgets/app_drawer.dart';
@@ -44,13 +45,62 @@ class AppShellScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         top: false,
-        child: IndexedStack(
-          index: selectedTab,
+        child: Column(
           children: [
-            HeroMode(enabled: selectedTab == 0, child: pages[0]),
-            HeroMode(enabled: selectedTab == 1, child: pages[1]),
-            HeroMode(enabled: selectedTab == 2, child: pages[2]),
-            HeroMode(enabled: selectedTab == 3, child: pages[3]),
+            // Offline Mode Indicator
+            Consumer(
+              builder: (context, ref, _) {
+                final isOffline = ref.watch(isOfflineSessionProvider);
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: isOffline
+                      ? Container(
+                          key: const ValueKey('offline-indicator'),
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.errorContainer,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.wifi_off_rounded,
+                                color: Theme.of(context).colorScheme.onErrorContainer,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Offline Mode',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('online-indicator')),
+                );
+              },
+            ),
+            // Main Content
+            Expanded(
+              child: IndexedStack(
+                index: selectedTab,
+                children: [
+                  HeroMode(enabled: selectedTab == 0, child: pages[0]),
+                  HeroMode(enabled: selectedTab == 1, child: pages[1]),
+                  HeroMode(enabled: selectedTab == 2, child: pages[2]),
+                  HeroMode(enabled: selectedTab == 3, child: pages[3]),
+                ],
+              ),
+            ),
           ],
         ),
       ),

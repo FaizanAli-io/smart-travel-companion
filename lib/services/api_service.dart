@@ -12,6 +12,11 @@ class ApiService {
   static const String _placesCacheKey = 'cached_places';
   static const int _offlineCacheSize = 8;
 
+  Future<List<TravelPlace>> readCachedPlaces() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readCachedPlaces(prefs);
+  }
+
   Future<List<TravelPlace>> fetchPlaces({bool refresh = false, bool forceOffline = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final cachedPlaces = _readCachedPlaces(prefs);
@@ -24,9 +29,10 @@ class ApiService {
       if (refresh) {
         final freshPlaces = await _fetchRemotePlaces();
         if (freshPlaces.isNotEmpty) {
+          final placesToCache = _trimPlacesForCache(freshPlaces);
           await prefs.setString(
             _placesCacheKey,
-            jsonEncode(freshPlaces.map((place) => place.toJson()).toList()),
+            jsonEncode(placesToCache.map((place) => place.toJson()).toList()),
           );
           return freshPlaces;
         }
@@ -47,9 +53,10 @@ class ApiService {
 
       final freshPlaces = await _fetchRemotePlaces();
       if (freshPlaces.isNotEmpty) {
+        final placesToCache = _trimPlacesForCache(freshPlaces);
         await prefs.setString(
           _placesCacheKey,
-          jsonEncode(freshPlaces.map((place) => place.toJson()).toList()),
+          jsonEncode(placesToCache.map((place) => place.toJson()).toList()),
         );
         return freshPlaces;
       } else {
@@ -75,7 +82,7 @@ class ApiService {
   }
 
   Future<List<TravelPlace>> _fetchRemotePlaces() async {
-    final response = await http.get(Uri.parse('$_photosUrl?_limit=$_offlineCacheSize'));
+    final response = await http.get(Uri.parse('$_photosUrl?_limit=1000'));
     if (response.statusCode != 200) {
       return const [];
     }
@@ -89,7 +96,7 @@ class ApiService {
 
     final selectedPlaces = samplePlaces.where((place) => photoIds.contains(place.id)).toList();
     if (selectedPlaces.isEmpty) {
-      return samplePlaces.take(_offlineCacheSize).toList();
+      return samplePlaces;
     }
 
     return selectedPlaces;
@@ -97,6 +104,13 @@ class ApiService {
 
   List<TravelPlace> _seedOfflinePlaces() {
     return samplePlaces.take(_offlineCacheSize).toList();
+  }
+
+  List<TravelPlace> _trimPlacesForCache(List<TravelPlace> places) {
+    if (places.length <= _offlineCacheSize) {
+      return places;
+    }
+    return places.take(_offlineCacheSize).toList();
   }
 
   Future<WeatherSnapshot> fetchWeather({

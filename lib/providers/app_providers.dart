@@ -10,6 +10,8 @@ import '../services/api_service.dart';
 
 enum HomeFeedMode { all, favorites, recent }
 
+enum MapViewMode { classic, satellite }
+
 class MapLocationData {
   final String label;
   final double latitude;
@@ -25,6 +27,7 @@ final karachiLocationProvider = Provider<MapLocationData>(
 
 final searchQueryProvider = StateProvider<String>((ref) => '');
 final homeFeedModeProvider = StateProvider<HomeFeedMode>((ref) => HomeFeedMode.all);
+final mapViewModeProvider = StateProvider<MapViewMode>((ref) => MapViewMode.classic);
 final selectedRegionProvider = StateProvider<String?>((ref) => null);
 final selectedSortProvider = StateProvider<PlaceSortOption>((ref) => PlaceSortOption.recommended);
 final showFavoritesOnlyProvider = StateProvider<bool>((ref) => false);
@@ -57,6 +60,11 @@ final placesProvider = FutureProvider<List<TravelPlace>>((ref) async {
   final apiService = ref.watch(apiServiceProvider);
   final offlineMode = ref.watch(offlineModeProvider);
   return apiService.fetchPlaces(refresh: !offlineMode, forceOffline: offlineMode);
+});
+
+final cachedPlacesProvider = FutureProvider<List<TravelPlace>>((ref) async {
+  final apiService = ref.watch(apiServiceProvider);
+  return apiService.readCachedPlaces();
 });
 
 final favoritesProvider = NotifierProvider<FavoritesNotifier, Set<int>>(FavoritesNotifier.new);

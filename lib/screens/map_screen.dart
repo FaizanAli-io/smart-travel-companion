@@ -66,6 +66,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final currentLocation = ref.watch(karachiLocationProvider);
     final nearestPlacesAsync = ref.watch(nearestPlacesProvider);
     final selectedPlace = ref.watch(selectedMapPlaceProvider);
+    final mapViewMode = ref.watch(mapViewModeProvider);
 
     return RefreshIndicator(
       onRefresh: _handleRefresh,
@@ -170,6 +171,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               child: CustomPaint(
                                 painter: _WorldMapPainter(
                                   gridColor: AppColors.primary,
+                                  mapViewMode: mapViewMode,
                                   highlightColor: Theme.of(context).brightness == Brightness.dark
                                       ? const Color(0xFF6E7BFF)
                                       : const Color(0xFF8290FF),
@@ -397,24 +399,31 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 class _WorldMapPainter extends CustomPainter {
   final Color gridColor;
   final Color highlightColor;
+  final MapViewMode mapViewMode;
 
-  _WorldMapPainter({required this.gridColor, required this.highlightColor});
+  _WorldMapPainter({
+    required this.gridColor,
+    required this.highlightColor,
+    required this.mapViewMode,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
+    final backgroundColors = mapViewMode == MapViewMode.satellite
+        ? [const Color(0xFF22311E), const Color(0xFF0E1A14)]
+        : [highlightColor.withValues(alpha: 0.18), const Color(0xFF0F172A).withValues(alpha: 0.05)];
     final background = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          highlightColor.withValues(alpha: 0.18),
-          const Color(0xFF0F172A).withValues(alpha: 0.05),
-        ],
+        colors: backgroundColors,
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, background);
 
     final linePaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.22)
+      ..color = (mapViewMode == MapViewMode.satellite ? Colors.white : gridColor).withValues(
+        alpha: mapViewMode == MapViewMode.satellite ? 0.10 : 0.22,
+      )
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -425,13 +434,17 @@ class _WorldMapPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y.toDouble()), Offset(size.width, y.toDouble()), linePaint);
     }
 
-    final glowPaint = Paint()..color = highlightColor.withValues(alpha: 0.10);
+    final glowPaint = Paint()
+      ..color = (mapViewMode == MapViewMode.satellite ? const Color(0xFF84C98B) : highlightColor)
+          .withValues(alpha: 0.10);
     canvas.drawCircle(Offset(size.width * 0.72, size.height * 0.52), 120, glowPaint);
   }
 
   @override
   bool shouldRepaint(covariant _WorldMapPainter oldDelegate) {
-    return oldDelegate.gridColor != gridColor || oldDelegate.highlightColor != highlightColor;
+    return oldDelegate.gridColor != gridColor ||
+        oldDelegate.highlightColor != highlightColor ||
+        oldDelegate.mapViewMode != mapViewMode;
   }
 }
 

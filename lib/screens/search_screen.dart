@@ -49,7 +49,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final regions = regionsAsync.when(
       data: (value) => value,
       loading: () => const <String>[],
-      error: (_, __) => const <String>[],
+      error: (_, _) => const <String>[],
     );
     final sortOption = ref.watch(selectedSortProvider);
     final region = ref.watch(selectedRegionProvider);
@@ -68,7 +68,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          children: [OfflineStateView(onRetry: () => ref.invalidate(placesProvider))],
+          children: [
+            OfflineStateView(onRetry: () => ref.invalidate(placesProvider)),
+          ],
         ),
         data: (results) => ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -94,7 +96,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       initialValue: sortOption,
                       items: PlaceSortOption.values
                           .map(
-                            (option) => DropdownMenuItem(value: option, child: Text(option.label)),
+                            (option) => DropdownMenuItem(
+                              value: option,
+                              child: Text(option.label),
+                            ),
                           )
                           .toList(),
                       onChanged: (value) {
@@ -110,12 +115,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     child: DropdownButtonFormField<String?>(
                       initialValue: region,
                       items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('All regions')),
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('All regions'),
+                        ),
                         ...regions.map(
-                          (value) => DropdownMenuItem<String?>(value: value, child: Text(value)),
+                          (value) => DropdownMenuItem<String?>(
+                            value: value,
+                            child: Text(value),
+                          ),
                         ),
                       ],
-                      onChanged: (value) => ref.read(selectedRegionProvider.notifier).state = value,
+                      onChanged: (value) =>
+                          ref.read(selectedRegionProvider.notifier).state =
+                              value,
                       decoration: const InputDecoration(labelText: 'Region'),
                     ),
                   ),
@@ -130,17 +143,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 children: [
                   Text(
                     'Show',
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   ToggleButtons(
                     borderRadius: BorderRadius.circular(16),
                     isSelected: [!showFavoritesOnly, showFavoritesOnly],
                     onPressed: (index) {
-                      ref.read(showFavoritesOnlyProvider.notifier).state = index == 1;
+                      ref.read(showFavoritesOnlyProvider.notifier).state =
+                          index == 1;
                     },
                     children: const [
-                      Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Text('All')),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Text('All'),
+                      ),
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 20),
                         child: Text('Favorites'),
@@ -157,14 +177,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   _controller.clear();
                   ref.read(searchQueryProvider.notifier).state = '';
                   ref.read(selectedRegionProvider.notifier).state = null;
-                  ref.read(selectedSortProvider.notifier).state = PlaceSortOption.recommended;
+                  ref.read(selectedSortProvider.notifier).state =
+                      PlaceSortOption.recommended;
                   ref.read(showFavoritesOnlyProvider.notifier).state = false;
                 },
               )
             else ...[
               Text(
                 '${results.length} places found',
-                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 16),
               ...results.asMap().entries.map(
@@ -177,8 +201,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       compact: true,
                       isFavorite: favoriteIds.contains(entry.value.id),
                       onTap: () => context.push('/detail/${entry.value.id}'),
-                      onFavoriteToggle: () =>
-                          ref.read(favoritesProvider.notifier).toggleFavorite(entry.value.id),
+                      onFavoriteToggle: () => ref
+                          .read(favoritesProvider.notifier)
+                          .toggleFavorite(entry.value.id),
                     ),
                   ),
                 ),
